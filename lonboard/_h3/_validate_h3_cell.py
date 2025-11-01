@@ -216,4 +216,5 @@ def is_pentagon(cell: NDArray[np.uint8]) -> NDArray[np.bool_]:
     Because they use a 128 bit integer as a bitmap, which is not available in
     numpy. Instead we use a simple lookup in a static array.
     """
-    return np.isin(cell, PENTAGON_BASE_CELLS)
+    pentagon_set = set(PENTAGON_BASE_CELLS)
+    return np.vectorize(pentagon_set.__contains__, otypes=[np.bool_])(cell)
