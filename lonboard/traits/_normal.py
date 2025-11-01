@@ -56,14 +56,17 @@ class NormalAccessor(FixedErrorTraitType):
         if value.ndim != 2 or value.shape[1] != 3:
             self.error(obj, value, info="normal array to be 2D with shape (N, 3)")
 
-        if not np.issubdtype(value.dtype, np.float32):
+        # Only cast if required
+        if value.dtype != np.float32:
             warnings.warn(
                 """Warning: Numpy array should be float32 type.
                 Converting to float32 point Arrow array""",
             )
-            value = value.astype(np.float32)
+            value = value.astype(np.float32, copy=False)
 
-        array = fixed_size_list_array(value.ravel("C"), 3)
+        # Use reshape(-1) instead of ravel for efficiency and clearer intent.
+        arr_flat = value.reshape(-1)
+        array = fixed_size_list_array(arr_flat, 3)
         return ChunkedArray([array])
 
     def validate(
@@ -99,24 +102,27 @@ class NormalAccessor(FixedErrorTraitType):
 
         assert isinstance(value, ChunkedArray)
 
-        if not DataType.is_fixed_size_list(value.type):
+        value_type = value.type
+        if not DataType.is_fixed_size_list(value_type):
             self.error(obj, value, info="normal Arrow array to be a FixedSizeList.")
 
-        if value.type.list_size != 3:
+        if value_type.list_size != 3:
             self.error(
                 obj,
                 value,
                 info=("normal Arrow array to have an inner size of 3."),
             )
 
-        value_type = value.type.value_type
-        assert value_type is not None
-        if not DataType.is_floating(value_type):
+        vt = value_type.value_type
+        assert vt is not None
+        if not DataType.is_floating(vt):
             self.error(
                 obj,
                 value,
                 info="Arrow array to be floating point type",
             )
 
-        value = value.cast(DataType.list(Field("", DataType.float32()), 3))
+        # Only cast if needed (existing dtype not float32)
+        if vt != DataType.float32():
+            value = value.cast(DataType.list(Field("", DataType.float32()), 3))
         return value.rechunk(max_chunksize=obj._rows_per_chunk)
