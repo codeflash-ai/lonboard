@@ -4,7 +4,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any
 
 import arro3.compute as ac
 from arro3.core import (
@@ -109,16 +109,52 @@ def serialize_pyarrow_column(
     return serialize_table_to_parquet(pyarrow_table, max_chunksize=max_chunksize)
 
 
-@overload
 def serialize_accessor(
     data: ChunkedArray,
     obj: BaseArrowLayer,
-) -> list[bytes]: ...
-@overload
+) -> list[bytes]:
+    if data is None:
+        return None
+
+    typ = type(data)
+    if (
+        typ is str
+        or typ is int
+        or typ is float
+        or typ is list
+        or typ is tuple
+        or typ is bytes
+    ):
+        return data
+
+    assert isinstance(data, ChunkedArray)
+    validate_accessor_length_matches_table(data, obj.table)
+    return serialize_pyarrow_column(data, max_chunksize=obj._rows_per_chunk)  # noqa: SLF001
+
+
 def serialize_accessor(
     data: str | float | list | tuple | bytes,
     obj: BaseArrowLayer,
-) -> str | int | float | list | tuple | bytes: ...
+) -> str | int | float | list | tuple | bytes:
+    if data is None:
+        return None
+
+    typ = type(data)
+    if (
+        typ is str
+        or typ is int
+        or typ is float
+        or typ is list
+        or typ is tuple
+        or typ is bytes
+    ):
+        return data
+
+    assert isinstance(data, ChunkedArray)
+    validate_accessor_length_matches_table(data, obj.table)
+    return serialize_pyarrow_column(data, max_chunksize=obj._rows_per_chunk)  # noqa: SLF001
+
+
 def serialize_accessor(
     data: str | float | list | tuple | bytes | ChunkedArray,
     obj: BaseArrowLayer,
@@ -126,9 +162,15 @@ def serialize_accessor(
     if data is None:
         return None
 
-    # We assume data has already been validated to the right type for this accessor
-    # Allow any json-serializable type through
-    if isinstance(data, (str, int, float, list, tuple, bytes)):
+    typ = type(data)
+    if (
+        typ is str
+        or typ is int
+        or typ is float
+        or typ is list
+        or typ is tuple
+        or typ is bytes
+    ):
         return data
 
     assert isinstance(data, ChunkedArray)
