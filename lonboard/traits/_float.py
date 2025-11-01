@@ -54,25 +54,28 @@ class FloatAccessor(FixedErrorTraitType):
 
     def _pandas_to_numpy(self, obj: BaseArrowLayer, value: pd.Series) -> np.ndarray:
         """Cast pandas Series to numpy ndarray."""
-        return np.asarray(value)
+        # Use .values to avoid redundant np.asarray overhead for typical Series input
+        return value.values
 
     def _numpy_to_arrow(self, obj: BaseArrowLayer, value: np.ndarray) -> ChunkedArray:
         if not np.issubdtype(value.dtype, np.number):
             self.error(obj, value, info="numeric dtype")
-
-        # TODO: should we always be casting to float32? Should it be
-        # possible/allowed to pass in ~int8 or a data type smaller than float32?
-        return ChunkedArray([value.astype(np.float32)])
+        # Only cast if not already float32
+        arr = value
+        if arr.dtype != np.float32:
+            arr = arr.astype(np.float32)
+        return ChunkedArray([arr])
 
     def validate(self, obj: BaseArrowLayer, value: Any) -> float | ChunkedArray:
         if isinstance(value, (int, float)):
             return float(value)
 
-        # pandas Series
-        if (
-            value.__class__.__module__.startswith("pandas")
-            and value.__class__.__name__ == "Series"
-        ):
+        # Use fast-path pandas Series detection, avoid repeated attribute lookups
+        fast_is_pandas_series = (
+            type(value).__module__.startswith("pandas")
+            and type(value).__name__ == "Series"
+        )
+        if fast_is_pandas_series:
             value = self._pandas_to_numpy(obj, value)
 
         if isinstance(value, np.ndarray):
