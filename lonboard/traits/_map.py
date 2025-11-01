@@ -30,6 +30,9 @@ class BasemapUrl(traitlets.Unicode):
     def validate(self, obj: HasTraits | None, value: Any) -> Any:
         value = super().validate(obj, value)
 
+        if value.lower().startswith(("http://", "https://")):
+            return value
+
         try:
             parsed = urlparse(value)
         except:  # noqa: E722
