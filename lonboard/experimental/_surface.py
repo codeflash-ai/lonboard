@@ -95,24 +95,28 @@ def generate_mesh_grid(
     # For each cell (i, j), we create two triangles:
     # Triangle 1: bottom-left, bottom-right, top-left
     # Triangle 2: bottom-right, top-right, top-left
+    rows = np.arange(n_rows, dtype=np.uint32)
+    cols = np.arange(n_cols, dtype=np.uint32)
+    grid_rows, grid_cols = np.meshgrid(rows, cols, indexing="ij")
+    grid_rows = grid_rows.ravel()
+    grid_cols = grid_cols.ravel()
+
+    bottom_left = grid_rows * (n_cols + 1) + grid_cols
+    bottom_right = bottom_left + 1
+    top_left = (grid_rows + 1) * (n_cols + 1) + grid_cols
+    top_right = top_left + 1
+
     triangles = np.empty((n_rows * n_cols * 2, 3), dtype=np.uint32)
 
-    i = 0
-    for row in range(n_rows):
-        for col in range(n_cols):
-            # Vertex indices for the current cell
-            bottom_left = row * (n_cols + 1) + col
-            bottom_right = bottom_left + 1
-            top_left = (row + 1) * (n_cols + 1) + col
-            top_right = top_left + 1
+    triangles[0::2, 0] = bottom_left
+    triangles[0::2, 1] = bottom_right
+    triangles[0::2, 2] = top_left
 
-            triangles[i] = [bottom_left, bottom_right, top_left]
-            triangles[i + 1] = [bottom_right, top_right, top_left]
-            i += 2
+    triangles[1::2, 0] = bottom_right
+    triangles[1::2, 1] = top_right
+    triangles[1::2, 2] = top_left
 
-    triangles_array = np.array(triangles, dtype=np.uint32)
-
-    return positions, triangles_array
+    return positions, triangles
 
 
 def rescale_positions_to_image_crs(
