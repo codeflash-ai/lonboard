@@ -14,14 +14,18 @@ def h3_to_str(h3_indices: NDArray[np.uint64]) -> NDArray[np.str_]:
     Returns a numpy array of type S15 (fixed-length ASCII strings of length 15).
     """
     # Ensure input is a numpy array of uint64
-    hex_chars = np.empty((h3_indices.size, 15), dtype="S1")
 
-    # Prepare hex digits lookup
-    hex_digits = np.array(list("0123456789ABCDEF"), dtype="S1")
+    # Vectorized hex conversion for 15 digits; avoids Python loops for performance
+    n = h3_indices.size
+    # Allocate output shape
+    hex_chars = np.empty((n, 15), dtype="S1")
+    # Prepare the hex digits lookup table
+    hex_digits = np.frombuffer(b"0123456789ABCDEF", dtype="S1")
 
-    # Fill each digit
-    for i in range(15):
-        shift = (15 - 1 - i) * 4
-        hex_chars[:, i] = hex_digits[(h3_indices >> shift) & 0xF]
+    # Compute the shifts for each digit position all at once (broadcasted)
+    shifts = np.arange(14, -1, -1, dtype=np.uint64) * 4
+    # Expand shifts for broadcasting against h3_indices
+    bits = (h3_indices[:, None] >> shifts) & 0xF
+    hex_chars[:] = hex_digits[bits]
 
     return hex_chars.view("<S15")[:, 0]
