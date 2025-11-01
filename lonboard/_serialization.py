@@ -195,7 +195,11 @@ def serialize_timestamp_accessor(
 
 def _to_camel(s: str) -> str:
     parts = s.split("_")
-    return parts[0] + "".join(p.title() for p in parts[1:])
+    if len(parts) == 1:
+        return s
+    res = [parts[0]]
+    res.extend(map(str.title, parts[1:]))
+    return "".join(res)
 
 
 def serialize_view_state(data: BaseViewState | None, _obj: Any) -> Any:
