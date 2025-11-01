@@ -18,33 +18,33 @@ def detect_environment() -> Environment:  # noqa: PLR0911
     https://github.com/plotly/plotly.py/blob/38ded4acc91bd6c33fbe2c8090d629ba2215dce1/packages/python/plotly/plotly/io/_renderers.py#L446C1-L538C37
     under the MIT license.
     """
-    if IPython and IPython.get_ipython():
+    ipy = IPython.get_ipython() if IPython else None
+    if ipy:
         try:
-            import google.colab  # noqa: F401
-
-            return Environment.Colab  # noqa: TRY300
+            return Environment.Colab
         except ImportError:
             pass
 
     if Path("/kaggle/input").exists():
         return Environment.Kaggle
 
-    if "AZURE_NOTEBOOKS_HOST" in os.environ:
+    environ = os.environ
+    if "AZURE_NOTEBOOKS_HOST" in environ:
         return Environment.Azure
 
-    if "VSCODE_PID" in os.environ:
+    if "VSCODE_PID" in environ:
         return Environment.Vscode
 
-    if "NTERACT_EXE" in os.environ:
+    if "NTERACT_EXE" in environ:
         return Environment.Nteract
 
-    if "COCALC_PROJECT_ID" in os.environ:
+    if "COCALC_PROJECT_ID" in environ:
         return Environment.Cocalc
 
-    if "DATABRICKS_RUNTIME_VERSION" in os.environ:
+    if "DATABRICKS_RUNTIME_VERSION" in environ:
         return Environment.Databricks
 
-    if IPython.get_ipython().__class__.__name__ == "TerminalInteractiveShell":
+    if ipy is not None and ipy.__class__.__name__ == "TerminalInteractiveShell":
         return Environment.IPythonTerminal
 
     return Environment.Unknown
