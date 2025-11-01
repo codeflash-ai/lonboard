@@ -15,6 +15,24 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from pyproj import CRS
 
+_FLOAT64 = DataType.float64()
+
+_FIELD_X = Field("x", _FLOAT64)
+
+_FIELD_Y = Field("y", _FLOAT64)
+
+_FIELD_Z = Field("z", _FLOAT64)
+
+_FIELD_M = Field("m", _FLOAT64)
+
+_STRUCT_XY = DataType.struct([_FIELD_X, _FIELD_Y])
+
+_STRUCT_XYZ = DataType.struct([_FIELD_X, _FIELD_Y, _FIELD_Z])
+
+_STRUCT_XYM = DataType.struct([_FIELD_X, _FIELD_Y, _FIELD_M])
+
+_STRUCT_XYZM = DataType.struct([_FIELD_X, _FIELD_Y, _FIELD_Z, _FIELD_M])
+
 
 class CoordinateDimension(str, Enum):
     XY = "xy"
@@ -32,40 +50,16 @@ def coord_storage_type(*, interleaved: bool, dims: CoordinateDimension) -> DataT
 
     """
     if interleaved:
-        return DataType.list(Field(dims, DataType.float64()), len(dims))
+        return DataType.list(Field(dims, _FLOAT64), len(dims))
 
     if dims == CoordinateDimension.XY:
-        return DataType.struct(
-            [
-                Field("x", DataType.float64()),
-                Field("y", DataType.float64()),
-            ],
-        )
+        return _STRUCT_XY
     if dims == CoordinateDimension.XYZ:
-        return DataType.struct(
-            [
-                Field("x", DataType.float64()),
-                Field("y", DataType.float64()),
-                Field("z", DataType.float64()),
-            ],
-        )
+        return _STRUCT_XYZ
     if dims == CoordinateDimension.XYM:
-        return DataType.struct(
-            [
-                Field("x", DataType.float64()),
-                Field("y", DataType.float64()),
-                Field("m", DataType.float64()),
-            ],
-        )
+        return _STRUCT_XYM
     if dims == CoordinateDimension.XYZM:
-        return DataType.struct(
-            [
-                Field("x", DataType.float64()),
-                Field("y", DataType.float64()),
-                Field("z", DataType.float64()),
-                Field("m", DataType.float64()),
-            ],
-        )
+        return _STRUCT_XYZM
 
     raise ValueError("Unreachable")
 
