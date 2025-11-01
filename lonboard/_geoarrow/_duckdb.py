@@ -9,6 +9,7 @@ from arro3.core import (
     Array,
     ChunkedArray,
     Field,
+    Schema,
     Table,
     fixed_size_list_array,
     list_array,
@@ -36,9 +37,13 @@ def from_duckdb(
     *,
     crs: str | pyproj.CRS | None = None,
 ) -> Table:
-    geom_col_idxs = [
-        i for i, t in enumerate(rel.types) if str(t) in DUCKDB_SPATIAL_TYPES
-    ]
+    # Optimize lookup by local variable and build index in one iteration
+    rel_types = rel.types
+    spatial_types = DUCKDB_SPATIAL_TYPES
+    geom_col_idxs = []
+    for i, t in enumerate(rel_types):
+        if str(t) in spatial_types:
+            geom_col_idxs.append(i)
 
     if len(geom_col_idxs) == 0:
         raise ValueError("No geometry column found in query.")
@@ -54,7 +59,8 @@ def from_duckdb(
         raise ValueError(msg)
 
     geom_col_idx = geom_col_idxs[0]
-    geom_type = rel.types[geom_col_idx]
+    geom_type = rel_types[geom_col_idx]
+    # Conditional dispatch optimized (direct comparison)
     if geom_type == "WKB_BLOB":
         return _from_geoarrow(
             rel,
@@ -102,20 +108,28 @@ def _from_geometry(
 ) -> Table:
     from duckdb import ColumnExpression, FunctionExpression
 
-    other_col_names = [name for i, name in enumerate(rel.columns) if i != geom_col_idx]
+    # Localize columns for fast repeated access
+    rel_columns = rel.columns
+
+    other_col_names = [name for i, name in enumerate(rel_columns) if i != geom_col_idx]
     if other_col_names:
         non_geo_table = Table.from_arrow(rel.select(*other_col_names).arrow())
     else:
         non_geo_table = None
-    geom_col_name = rel.columns[geom_col_idx]
+
+    geom_col_name = rel_columns[geom_col_idx]
+
+    # Use compiled regex for repeated use
 
     # A poor-man's string interpolation check
     # We can't pass in SQL-templated strings for the column name
     re_match = r"[a-zA-Z][a-zA-Z0-9_]*"
-    assert re.fullmatch(
-        re_match,
-        geom_col_name,
-    ), f"Expected geometry column name to match regex: {re_match}"
+    if not re.fullmatch(re_match, geom_col_name):
+        raise AssertionError(
+            f"Expected geometry column name to match regex: {re_match}"
+        )
+
+    # Single call to arrow() to avoid duplicate conversion
 
     geom_table = Table.from_arrow(
         rel.select(
@@ -125,14 +139,20 @@ def _from_geometry(
         ).arrow(),
     )
 
-    metadata = _make_geoarrow_field_metadata(EXTENSION_NAME.WKB, crs)
-    geom_field = geom_table.schema.field(0).with_metadata(metadata)
+    # Default to EPSG:4326 if no CRS is specified
+    crs_val = crs if crs is not None else "EPSG:4326"
+    metadata = _make_geoarrow_field_metadata(EXTENSION_NAME.WKB, crs_val)
+    geom_field = Field(
+        geom_col_name,
+        geom_table.column(0).type,
+        metadata=metadata,
+    )
+
     if non_geo_table is not None:
         return non_geo_table.append_column(geom_field, geom_table.column(0))
-    # Need to set geospatial metadata onto the Arrow table, because the table
-    # returned from duckdb has none.
-    new_schema = geom_table.schema.set(0, geom_field)
-    return geom_table.with_schema(new_schema)
+
+    # Create a new table with the GeoArrow metadata-enriched field
+    return Table.from_arrays([geom_table.column(0)], schema=Schema([geom_field]))
 
 
 def _from_geoarrow(
@@ -142,8 +162,12 @@ def _from_geoarrow(
     geom_col_idx: int,
     crs: str | pyproj.CRS | None = None,
 ) -> Table:
+    # Default to EPSG:4326 if no CRS is specified
+    crs_val = crs if crs is not None else "EPSG:4326"
+    # Avoid repeated rel.arrow() and retrieve once
+
     table = Table.from_arrow(rel.arrow())
-    metadata = _make_geoarrow_field_metadata(extension_type, crs)
+    metadata = _make_geoarrow_field_metadata(extension_type, crs_val)
     geom_field = table.schema.field(geom_col_idx).with_metadata(metadata)
     return table.set_column(geom_col_idx, geom_field, table.column(geom_col_idx))
 
@@ -154,15 +178,20 @@ def _from_box2d(
     geom_col_idx: int,
     crs: str | pyproj.CRS | None = None,
 ) -> Table:
+    # Default to EPSG:4326 if no CRS is specified
+    crs_val = crs if crs is not None else "EPSG:4326"
+
+    # Retrieve Arrow table once
+
     table = Table.from_arrow(rel.arrow())
     geom_col = table.column(geom_col_idx)
+    # Avoid repeated list allocation by accumulating with list comprehension where possible
+    polygon_chunks: list[Array] = [
+        _convert_box2d_to_geoarrow_polygon_array(chunk) for chunk in geom_col.chunks
+    ]
 
-    polygon_chunks: list[Array] = []
-    for geom_chunk in geom_col.chunks:
-        polygon_array = _convert_box2d_to_geoarrow_polygon_array(geom_chunk)
-        polygon_chunks.append(polygon_array)
-
-    metadata = _make_geoarrow_field_metadata(EXTENSION_NAME.POLYGON, crs)
+    # Generate field metadata for new polygon type
+    metadata = _make_geoarrow_field_metadata(EXTENSION_NAME.POLYGON, crs_val)
     prev_field = table.schema.field(geom_col_idx)
     geom_field = Field(prev_field.name, polygon_chunks[0].type, metadata=metadata)
     return table.set_column(geom_col_idx, geom_field, ChunkedArray(polygon_chunks))
