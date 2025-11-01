@@ -172,17 +172,23 @@ def infer_timestamp_dtype(dtype: np.dtype | pd.DatetimeTZDtype) -> DataType:
 def apply_offsets_to_table(table: Table, offsets: Array) -> Table:
     batch = table.combine_chunks().to_batches()[0]
 
-    new_fields = []
-    new_arrays = []
+    # Minimize attribute lookups
+    schema = batch.schema
+    metadata = schema.metadata
+    num_columns = batch.num_columns
 
-    for field_idx in range(batch.num_columns):
-        field = batch.schema.field(field_idx)
-        new_field = field.with_type(DataType.list(field))
-        new_array = list_array(offsets, batch[field_idx], type=new_field)
+    # Cache columns and fields to avoid repeated expensive operations
+    columns = [batch[i] for i in range(num_columns)]
+    fields = [schema.field(i) for i in range(num_columns)]
 
-        new_fields.append(new_field)
-        new_arrays.append(new_array)
+    # Use list comprehensions for tight loops; avoids repeated list.append overhead
+    new_fields = [field.with_type(DataType.list(field)) for field in fields]
 
-    new_schema = Schema(new_fields, metadata=batch.schema.metadata)
+    new_arrays = [
+        list_array(offsets, col, type=new_field)
+        for col, new_field in zip(columns, new_fields)
+    ]
+
+    new_schema = Schema(new_fields, metadata=metadata)
     new_batch = RecordBatch(new_arrays, schema=new_schema)
     return Table.from_batches([new_batch])
