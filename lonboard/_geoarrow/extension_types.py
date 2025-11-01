@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -148,11 +149,7 @@ def multilinestring_storage_type(
         large_list: Whether to use a large list with int64 offsets for the inner type
 
     """
-    linestrings_type = linestring_storage_type(
-        large_list=large_list,
-        interleaved=interleaved,
-        dims=dims,
-    )
+    linestrings_type = _cached_linestring_storage_type(interleaved, dims, large_list)
     if large_list:
         return DataType.large_list(Field("linestrings", linestrings_type))
     return DataType.list(Field("linestrings", linestrings_type))
@@ -349,3 +346,23 @@ def construct_geometry_array(  # noqa: PLR0915
         return field, arrow_geoms
 
     raise ValueError(f"Unsupported type for geoarrow: {geom_type}")
+
+
+@lru_cache(maxsize=64)
+def _cached_coord_storage_type(
+    interleaved: bool, dims: CoordinateDimension
+) -> DataType:
+    # Call the underlying non-cached function, keeping the signature compatible with lru_cache.
+    # coord_storage_type is assumed to be imported from lonboard._geoarrow.extension_types
+    from lonboard._geoarrow.extension_types import coord_storage_type
+
+    return coord_storage_type(interleaved=interleaved, dims=dims)
+
+
+@lru_cache(maxsize=64)
+def _cached_linestring_storage_type(
+    interleaved: bool, dims: CoordinateDimension, large_list: bool
+) -> DataType:
+    return linestring_storage_type(
+        interleaved=interleaved, dims=dims, large_list=large_list
+    )
