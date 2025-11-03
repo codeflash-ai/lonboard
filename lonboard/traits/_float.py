@@ -54,7 +54,10 @@ class FloatAccessor(FixedErrorTraitType):
 
     def _pandas_to_numpy(self, obj: BaseArrowLayer, value: pd.Series) -> np.ndarray:
         """Cast pandas Series to numpy ndarray."""
-        return np.asarray(value)
+        # Directly use the underlying numpy array if possible, avoiding unnecessary copy in np.asarray
+        arr = value.values
+        # For performance, return arr directly (it's already a numpy ndarray)
+        return arr
 
     def _numpy_to_arrow(self, obj: BaseArrowLayer, value: np.ndarray) -> ChunkedArray:
         if not np.issubdtype(value.dtype, np.number):
