@@ -187,7 +187,11 @@ def get_mode(bits: NDArray[np.uint64]) -> NDArray[np.uint8]:
 
 def get_base_cell(bits: NDArray[np.uint64]) -> NDArray[np.uint8]:
     """Return the H3 index base cell bits."""
-    return ((bits & BASE_CELL_MASK) >> BASE_CELL_OFFSET).astype(np.uint8)
+    # Use numpy right_shift and bitwise_and for potentially faster vectorized operations
+    return np.bitwise_and(
+        np.right_shift(bits, BASE_CELL_OFFSET),
+        0b111_1111,
+    ).astype(np.uint8)
 
 
 def get_resolution(bits: NDArray[np.uint64]) -> NDArray[np.uint8]:
