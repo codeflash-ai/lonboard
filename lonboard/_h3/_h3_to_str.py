@@ -17,11 +17,11 @@ def h3_to_str(h3_indices: NDArray[np.uint64]) -> NDArray[np.str_]:
     hex_chars = np.empty((h3_indices.size, 15), dtype="S1")
 
     # Prepare hex digits lookup
-    hex_digits = np.array(list("0123456789ABCDEF"), dtype="S1")
+    hex_digits = np.frombuffer(b"0123456789ABCDEF", dtype="S1")
 
-    # Fill each digit
-    for i in range(15):
-        shift = (15 - 1 - i) * 4
-        hex_chars[:, i] = hex_digits[(h3_indices >> shift) & 0xF]
+    # Vectorized digit extraction
+    shifts = np.arange(14, -1, -1, dtype=np.uint64) * 4
+    digit_values = ((h3_indices[:, None] >> shifts[None, :]) & 0xF).astype(np.uint8)
+    hex_chars[:] = hex_digits[digit_values]
 
     return hex_chars.view("<S15")[:, 0]
