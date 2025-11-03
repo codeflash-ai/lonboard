@@ -30,6 +30,7 @@ def get_geometry_column_index(schema: Schema) -> int | None:
 
     for field_idx in range(len(schema)):
         field_metadata = schema.field(field_idx).metadata
+        print(f"Field {field_idx} metadata:", field_metadata)  # Debug print
         if (
             field_metadata
             and field_metadata.get(b"ARROW:extension:name")
@@ -134,7 +135,7 @@ def remove_extension_kwargs(
 
 def split_mixed_gdf(gdf: gpd.GeoDataFrame) -> list[gpd.GeoDataFrame]:
     """Split a GeoDataFrame into one or more GeoDataFrames with unique geometry type."""
-    indices = indices_by_geometry_type(gdf.geometry)
+    indices = indices_by_geometry_type(gdf.geometry.values)
     if indices is None:
         return [gdf]
 
@@ -210,18 +211,18 @@ def indices_by_geometry_type(
         if unique_type_ids == {GeometryType.POLYGON, GeometryType.MULTIPOLYGON}:
             return None
 
-    point_indices = np.where(
+    point_indices = np.flatnonzero(
         (type_ids == GeometryType.POINT) | (type_ids == GeometryType.MULTIPOINT),
-    )[0]
+    )
 
-    linestring_indices = np.where(
+    linestring_indices = np.flatnonzero(
         (type_ids == GeometryType.LINESTRING)
         | (type_ids == GeometryType.MULTILINESTRING),
-    )[0]
+    )
 
-    polygon_indices = np.where(
+    polygon_indices = np.flatnonzero(
         (type_ids == GeometryType.POLYGON) | (type_ids == GeometryType.MULTIPOLYGON),
-    )[0]
+    )
 
     return point_indices, linestring_indices, polygon_indices
 
