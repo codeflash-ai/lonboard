@@ -194,8 +194,15 @@ def serialize_timestamp_accessor(
 
 
 def _to_camel(s: str) -> str:
+    # Fast path if there are no underscores
+    if "_" not in s:
+        return s
     parts = s.split("_")
-    return parts[0] + "".join(p.title() for p in parts[1:])
+    # Precompute .title() for all parts except the first
+    if len(parts) == 2:
+        # Common case optimization: only one underscore
+        return parts[0] + parts[1].title()
+    return parts[0] + "".join(map(str.title, parts[1:]))
 
 
 def serialize_view_state(data: BaseViewState | None, _obj: Any) -> Any:
