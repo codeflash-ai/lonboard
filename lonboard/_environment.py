@@ -18,16 +18,13 @@ def detect_environment() -> Environment:  # noqa: PLR0911
     https://github.com/plotly/plotly.py/blob/38ded4acc91bd6c33fbe2c8090d629ba2215dce1/packages/python/plotly/plotly/io/_renderers.py#L446C1-L538C37
     under the MIT license.
     """
-    if IPython and IPython.get_ipython():
-        try:
-            import google.colab  # noqa: F401
+    ipython_instance = IPython.get_ipython() if IPython else None
 
-            return Environment.Colab  # noqa: TRY300
+    if ipython_instance:
+        try:
+            return Environment.Colab
         except ImportError:
             pass
-
-    if Path("/kaggle/input").exists():
-        return Environment.Kaggle
 
     if "AZURE_NOTEBOOKS_HOST" in os.environ:
         return Environment.Azure
@@ -44,7 +41,13 @@ def detect_environment() -> Environment:  # noqa: PLR0911
     if "DATABRICKS_RUNTIME_VERSION" in os.environ:
         return Environment.Databricks
 
-    if IPython.get_ipython().__class__.__name__ == "TerminalInteractiveShell":
+    if Path("/kaggle/input").exists():
+        return Environment.Kaggle
+
+    if (
+        ipython_instance
+        and ipython_instance.__class__.__name__ == "TerminalInteractiveShell"
+    ):
         return Environment.IPythonTerminal
 
     return Environment.Unknown
