@@ -195,13 +195,27 @@ def offsets_to_arrow(
     # a recent version (2.1? 2.1.1?) switched to producing `int32` arrays where
     # possible. In the case that we receive `int64` arrays, we downcast them to int32 if
     # possible
-    if all(offset_arr.dtype == np.int32 for offset_arr in offsets):
+
+    # Fast path: all dtypes already int32, just wrap and return
+    are_int32 = True
+    for offset_arr in offsets:
+        if offset_arr.dtype != np.int32:
+            are_int32 = False
+            break
+    if are_int32:
         return [Array(offset_arr) for offset_arr in offsets], False
 
-    if any(offset_arr[-1] >= np.iinfo(np.int32).max for offset_arr in offsets):
-        return [Array(offset_arr) for offset_arr in offsets], True
+    # Second path: detect if any offset array would overflow int32 as ArrowLargeList
+    int32_max = np.iinfo(np.int32).max
+    for offset_arr in offsets:
+        # offset_arr has at least one element (ragged offsets array), so [-1] is safe.
+        if offset_arr[-1] >= int32_max:
+            return [Array(offset_arr) for offset_arr in offsets], True
 
-    return [Array(offset_arr.astype(np.int32)) for offset_arr in offsets], False
+    # Downcast all to int32: np.ndarray.astype is faster than type check in-comprehension
+    return [
+        Array(offset_arr.astype(np.int32, copy=False)) for offset_arr in offsets
+    ], False
 
 
 def construct_geometry_array(  # noqa: PLR0915
